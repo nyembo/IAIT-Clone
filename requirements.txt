@@ -1,0 +1,16 @@
+streamlit
+pandas
+<<<<<<< HEAD
+numpy
+faiss-cpu
+sentence-transformers
+scikit-learn
+fuzzywuzzy
+python-Levenshtein
+Pillow
+=======
+sentence-transformers
+fuzzywuzzy
+scikit-learn
+python-Levenshtein
+>>>>>>> b4390ff (first commit)
