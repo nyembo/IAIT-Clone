@@ -6,4 +6,5 @@ sentence-transformers
 fuzzywuzzy
 python-Levenshtein
 Pillow
+faiss-cpu
 huggingface-hub
