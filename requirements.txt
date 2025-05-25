@@ -7,4 +7,3 @@ scikit-learn
 fuzzywuzzy
 python-Levenshtein
 Pillow
-
