@@ -27,21 +27,20 @@ def show_traceback_on_streamlit():
         st.text("".join(traceback.format_exception(*sys.exc_info())))
         st.stop()
 
-# Safe logo load
-logo_path = "logo.png"
-try:
-    with open(logo_path, "rb") as f:
-        logo_html = f"""
-        <div style='text-align:center;'>
-            <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
-                 style='width: 20%; max-width: 200px; height: auto;'>
-        </div>
-        """
-        st.markdown(logo_html, unsafe_allow_html=True)
-except FileNotFoundError:
-    st.warning("\u26a0\ufe0f logo.png not found. Skipping logo.")
-
-with show_traceback_on_streamlit():
+def main():
+    # Safe logo load
+    logo_path = "logo.png"
+    try:
+        with open(logo_path, "rb") as f:
+            logo_html = f"""
+            <div style='text-align:center;'>
+                <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
+                     style='width: 20%; max-width: 200px; height: auto;'>
+            </div>
+            """
+            st.markdown(logo_html, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning("\u26a0\ufe0f logo.png not found. Skipping logo.")
 
     @st.cache_resource
     def load_model():
@@ -208,28 +207,32 @@ with show_traceback_on_streamlit():
                 st.markdown(f"**Funding Amount:** ${org_row['total-commitment-usd']:,.0f}")
                 st.markdown("---")
 
-# Optional banner
-banner_path = "banner.png"
-try:
-    with open(banner_path, "rb") as f:
-        banner_html = f"""
-        <div style='text-align:center; margin-top: 50px;'>
-            <a href='https://www.econbook.biz' target='_blank'>
-                <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
-                     style='width: 100%; max-width: 800px; height: auto;'>
-            </a>
-        </div>
-        """
-        st.markdown(banner_html, unsafe_allow_html=True)
-except FileNotFoundError:
-    st.warning("\u26a0\ufe0f banner.png not found. Skipping footer banner.")
+    # Optional banner
+    banner_path = "banner.png"
+    try:
+        with open(banner_path, "rb") as f:
+            banner_html = f"""
+            <div style='text-align:center; margin-top: 50px;'>
+                <a href='https://www.econbook.biz' target='_blank'>
+                    <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
+                         style='width: 100%; max-width: 800px; height: auto;'>
+                </a>
+            </div>
+            """
+            st.markdown(banner_html, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning("\u26a0\ufe0f banner.png not found. Skipping footer banner.")
 
-st.markdown("""
----
-<small>
-**Technical Disclaimer: Data & Model Use**  
-This tool analyzes historical aid data from IATI to suggest matching funders based on project descriptions.
+    st.markdown("""
+    ---
+    <small>
+    **Technical Disclaimer: Data & Model Use**  
+    This tool analyzes historical aid data from IATI to suggest matching funders based on project descriptions.
 
-[Submit your NGO](https://www.virunga.ai/submission) to be included in future versions.
-</small>
-""", unsafe_allow_html=True)
+    [Submit your NGO](https://www.virunga.ai/submission) to be included in future versions.
+    </small>
+    """, unsafe_allow_html=True)
+
+# Entry point
+with show_traceback_on_streamlit():
+    main()
