@@ -10,7 +10,7 @@ import base64
 
 st.set_page_config(page_title="Grant Matcher", layout="centered")
 
-# Optional Hugging Face token setup (Streamlit Cloud secret)
+# Inject Hugging Face token
 if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
     os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
@@ -30,7 +30,8 @@ except FileNotFoundError:
 
 @st.cache_resource
 def load_model():
-    return SentenceTransformer('all-MiniLM-L6-v2', device="cpu", trust_remote_code=True)
+    model_name = 'sentence-transformers/all-MiniLM-L6-v2'
+    return SentenceTransformer(model_name, cache_folder="./hf_model_cache", device="cpu", trust_remote_code=True)
 
 model = load_model()
 
@@ -75,7 +76,6 @@ if df.empty:
 
 @st.cache_resource
 def build_nn(df):
-    st.info("🔄 Building model...")
     texts = df['description append'].tolist()
     embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
     nn_model = NearestNeighbors(n_neighbors=min(5000, len(df)), metric='cosine')
@@ -160,8 +160,8 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
 st.markdown("### Grant Matcher: Find Matching Funders and Their Projects")
 
 amount_range = st.slider("Select grant amount range (USD)", 0, 10000000, (50000, 1000000))
-country_input = st.text_input("Enter recipient country/region(s) (comma separated) — Leave empty for all countries")
-sector_input = st.text_input("Enter sector(s) (comma separated) — Leave empty for all sectors")
+country_input = st.text_input("Enter recipient country/region(s) (comma separated)")
+sector_input = st.text_input("Enter sector(s) (comma separated)")
 description = st.text_area("Describe your project")
 
 all_types = sorted(df['reporting-org-type'].dropna().unique())
@@ -220,10 +220,11 @@ except FileNotFoundError:
 st.markdown("""
 ---
 <small>
-**Technical Disclaimer: Data & Model Use**  
-This tool helps NGOs identify funders based on historical projects from IATI data.
+**Technical Disclaimer: Data & Model Use**
 
-Funders are ranked by how closely their past projects match your description.  
+This tool helps NGOs identify funders based on historical projects from IATI data.  
+Funders are ranked by how closely their past projects match your description.
+
 Learn more or submit your NGO for inclusion at [virunga.ai](https://www.virunga.ai/submission).
 </small>
 """, unsafe_allow_html=True)
