@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
 from sentence_transformers import SentenceTransformer
 from sklearn.neighbors import NearestNeighbors
 from fuzzywuzzy import fuzz
@@ -9,15 +10,23 @@ import base64
 
 st.set_page_config(page_title="Grant Matcher", layout="centered")
 
-# Load logo
+# Optional Hugging Face token setup (Streamlit Cloud secret)
+if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
+    os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+
+# Load logo safely
 logo_path = "logo.png"
-logo_html = f"""
-<div style='text-align:center;'>
-    <img src='data:image/png;base64,{base64.b64encode(open(logo_path, "rb").read()).decode()}' 
-         style='width: 20%; max-width: 200px; height: auto;'>
-</div>
-"""
-st.markdown(logo_html, unsafe_allow_html=True)
+try:
+    with open(logo_path, "rb") as f:
+        logo_html = f"""
+        <div style='text-align:center;'>
+            <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
+                 style='width: 20%; max-width: 200px; height: auto;'>
+        </div>
+        """
+        st.markdown(logo_html, unsafe_allow_html=True)
+except FileNotFoundError:
+    st.warning("⚠️ logo.png not found. Skipping logo.")
 
 @st.cache_resource
 def load_model():
@@ -28,29 +37,48 @@ model = load_model()
 @st.cache_data
 def load_data():
     url = "https://storage.googleapis.com/iati-dataset/IATI-updated.csv"
-    df = pd.read_csv(url)
-    #df.columns = df.columns.str.strip().str.lower()
-    
+    try:
+        df = pd.read_csv(url, engine="python", encoding="utf-8")
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}")
+        return pd.DataFrame()
+
+    df.columns = df.columns.str.strip().str.lower()
+
+    required_cols = ['recipient-country', 'sector', 'description append',
+                     'total-commitment-usd', 'start-actual', 'reporting-org-type']
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"🚫 Required column missing: `{col}`")
+            return pd.DataFrame()
+
     df['recipient-country'] = df['recipient-country'].astype(str).str.lower()
     df['sector'] = df['sector'].astype(str).str.lower()
-    df['description append'] = df['Description Append'].astype(str)
+    df['description append'] = df['description append'].astype(str)
     df['reporting-org-type'] = df['reporting-org-type'].astype(str).str.strip()
-    df['total-commitment-usd'] = pd.to_numeric(df['total-Commitment-USD'], errors='coerce')
+    df['total-commitment-usd'] = pd.to_numeric(df['total-commitment-usd'], errors='coerce')
     df['start-actual'] = pd.to_datetime(df['start-actual'], errors='coerce')
-    important_cols = ['recipient-country', 'sector', 'description append', 'total-commitment-usd', 'start-actual', 'reporting-org-type']
-    df = df.dropna(subset=important_cols)
-    for col in ['recipient-country', 'sector', 'Description Append', 'reporting-org-type']:
+
+    df = df.dropna(subset=required_cols)
+    for col in ['recipient-country', 'sector', 'description append', 'reporting-org-type']:
         df = df[df[col].str.strip() != '']
+
     df['sector_list'] = df['sector'].str.split(';').apply(lambda x: [i.strip() for i in x])
     df = df.explode('sector_list')
     return df
 
 df = load_data()
 
+if df.empty:
+    st.error("❌ Dataset could not be loaded or cleaned.")
+    st.stop()
+
 @st.cache_resource
 def build_nn(df):
-    embeddings = np.vstack(df['Description Append'].apply(lambda x: model.encode(x, convert_to_numpy=True)))
-    nn_model = NearestNeighbors(n_neighbors=5000, metric='cosine')
+    st.info("🔄 Building model...")
+    texts = df['description append'].tolist()
+    embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
+    nn_model = NearestNeighbors(n_neighbors=min(5000, len(df)), metric='cosine')
     nn_model.fit(embeddings)
     return nn_model, embeddings
 
@@ -70,7 +98,7 @@ def summarize_focus_area(df_org):
         return "Not enough information."
     sectors = df_org['sector_list'].value_counts().head(3).index.tolist()
     countries = [c.title() for c in df_org['recipient-country'].value_counts().head(3).index.tolist()]
-    avg_amount = df_org['total-Commitment-USD'].mean()
+    avg_amount = df_org['total-commitment-usd'].mean()
     return (
         f"Focuses on sectors: {', '.join(sectors)}.\n"
         f"Operates mainly in: {', '.join(countries)}.\n"
@@ -86,7 +114,6 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
     matched_sectors = match_fuzzy(sector_input, df['sector_list'].unique()) if sector_input.strip() else []
 
     org_scores = {}
-
     for pos, idx in enumerate(I[0]):
         row = df.iloc[idx]
         if row['reporting-org-type'] not in selected_types:
@@ -95,17 +122,14 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
             continue
         if sector_input.strip() and row['sector_list'] not in matched_sectors:
             continue
-        if not (amount_min <= row['total-Commitment-USD'] <= amount_max):
+        if not (amount_min <= row['total-commitment-usd'] <= amount_max):
             continue
 
         org = row['reporting-org']
         if org not in org_scores:
             org_scores[org] = {
-                'country_count': 0,
-                'amount_count': 0,
-                'sector_match': 0,
-                'similarities': [],
-                'rows': []
+                'country_count': 0, 'amount_count': 0, 'sector_match': 0,
+                'similarities': [], 'rows': []
             }
 
         org_scores[org]['amount_count'] += 1
@@ -119,20 +143,13 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
     final_orgs = []
     for org, info in org_scores.items():
         if info['amount_count'] >= 3:
-            funding_score = min(info['amount_count'] / 10, 1)
-            country_score = min(info['country_count'] / 10, 1) if country_input.strip() else 0
-            sector_score = min(info['sector_match'] / 10, 1) if sector_input.strip() else 0
-            description_score = np.mean(info['similarities'])
-            avg_grant = np.mean([r['total-Commitment-USD'] for r in info['rows']])
-            avg_grant_score = avg_grant / 10_000_000
-            project_count_score = len(info['rows']) / 1000
             score = (
-                (0.4 * funding_score) +
-                (0.3 * country_score) +
-                (0.1 * sector_score) +
-                (0.2 * description_score) -
-                (0.2 * avg_grant_score) -
-                (0.2 * project_count_score)
+                0.4 * min(info['amount_count'] / 10, 1) +
+                0.3 * min(info['country_count'] / 10, 1) +
+                0.1 * min(info['sector_match'] / 10, 1) +
+                0.2 * np.mean(info['similarities']) -
+                0.2 * (np.mean([r['total-commitment-usd'] for r in info['rows']]) / 10_000_000) -
+                0.2 * (len(info['rows']) / 1000)
             )
             final_orgs.append((org, score, info['rows']))
 
@@ -161,7 +178,7 @@ st.session_state.select_all_orgs = select_all
 st.session_state.selected_org_types = selected_types
 
 if st.button("Find Matches"):
-    with st.spinner("Matching your project..."):
+    with st.spinner("🔎 Matching your project..."):
         matches = match_projects(description, amount_range[0], amount_range[1],
                                  country_input, sector_input, selected_types)
 
@@ -170,44 +187,43 @@ if st.button("Find Matches"):
     else:
         st.subheader("✅ Top Matching Organizations and Their Projects")
         for org_name, score, rows in matches:
-            filtered_rows = [r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['Description Append'])]
-            if not filtered_rows:
+            org_row = next((r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['description append'])), None)
+            if not org_row:
                 continue
-            org_row = filtered_rows[0]
-            org_display = f"[{org_name}]({org_row['publisher_url']})" if pd.notna(org_row['publisher_url']) else org_name
+            org_display = f"[{org_name}]({org_row['publisher_url']})" if pd.notna(org_row.get('publisher_url')) else org_name
 
             st.markdown(f"### Organization: {org_display}")
             st.markdown(f"**Focus Area:**\n\n{summarize_focus_area(df[df['reporting-org'] == org_name])}")
-            st.markdown(f"**Matched Project Description:**\n\n{org_row['Description Append']}")
+            st.markdown(f"**Matched Project Description:**\n\n{org_row['description append']}")
             st.markdown(f"**Country:** {org_row['recipient-country'].title()}")
             st.markdown(f"**Sector:** {org_row['sector_list'].title()}")
-            st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
+            st.markdown(f"**Funding Amount:** ${org_row['total-commitment-usd']:,.0f}")
             st.markdown("---")
 
 # Footer banner
 banner_path = "banner.png"
-banner_html = f"""
-<div style='text-align:center; margin-top: 50px;'>
-    <a href='https://www.econbook.biz' target='_blank'>
-        <img src='data:image/png;base64,{base64.b64encode(open(banner_path, "rb").read()).decode()}' 
-             style='width: 100%; max-width: 800px; height: auto;'>
-    </a>
-</div>
-"""
-st.markdown(banner_html, unsafe_allow_html=True)
+try:
+    with open(banner_path, "rb") as f:
+        banner_html = f"""
+        <div style='text-align:center; margin-top: 50px;'>
+            <a href='https://www.econbook.biz' target='_blank'>
+                <img src='data:image/png;base64,{base64.b64encode(f.read()).decode()}' 
+                     style='width: 100%; max-width: 800px; height: auto;'>
+            </a>
+        </div>
+        """
+        st.markdown(banner_html, unsafe_allow_html=True)
+except FileNotFoundError:
+    st.warning("⚠️ banner.png not found. Skipping footer banner.")
 
 # Disclaimer
 st.markdown("""
 ---
 <small>
-**Technical Disclaimer: Data & Model Use**
+**Technical Disclaimer: Data & Model Use**  
+This tool helps NGOs identify funders based on historical projects from IATI data.
 
-This tool was created in response to the defunding of the United States Agency for International Development (USAID) to help NGOs identify alternative funders that have historically supported similar types of projects.
-
-The tool leverages a Large Language Model (LLM) enhanced with vector similarity search. The underlying dataset is compiled from publicly available records published through the International Aid Transparency Initiative (IATI), available at <https://iatistandard.org/en/>.
-
-Funders are ranked based on the number of past projects in the dataset that closely match the user's project description.
-
-If your NGO is not currently represented and you would like to be included in future versions of this tool, please complete our [submission form](https://www.virunga.ai/submission).
+Funders are ranked by how closely their past projects match your description.  
+Learn more or submit your NGO for inclusion at [virunga.ai](https://www.virunga.ai/submission).
 </small>
 """, unsafe_allow_html=True)
