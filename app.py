@@ -4,6 +4,7 @@ import numpy as np
 import os
 import sys
 import traceback
+from contextlib import contextmanager
 from sentence_transformers import SentenceTransformer
 from sklearn.neighbors import NearestNeighbors
 from fuzzywuzzy import fuzz
@@ -12,21 +13,21 @@ import base64
 
 st.set_page_config(page_title="Grant Matcher", layout="centered")
 
-# 🔐 Use Hugging Face token if available
+# Hugging Face token injection
 if "HUGGINGFACEHUB_API_TOKEN" in st.secrets:
     os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
-# 🔍 Optional crash traceback display
+@contextmanager
 def show_traceback_on_streamlit():
     try:
         yield
     except Exception as e:
-        st.error(f"❌ App crashed: {e}")
+        st.error(f"\u274c App crashed: {e}")
         st.text("Traceback:")
         st.text("".join(traceback.format_exception(*sys.exc_info())))
         st.stop()
 
-# 📄 Show logo if available
+# Safe logo load
 logo_path = "logo.png"
 try:
     with open(logo_path, "rb") as f:
@@ -38,14 +39,18 @@ try:
         """
         st.markdown(logo_html, unsafe_allow_html=True)
 except FileNotFoundError:
-    st.warning("⚠️ logo.png not found. Skipping logo.")
+    st.warning("\u26a0\ufe0f logo.png not found. Skipping logo.")
 
 with show_traceback_on_streamlit():
 
     @st.cache_resource
     def load_model():
-        model_name = 'sentence-transformers/all-MiniLM-L6-v2'
-        return SentenceTransformer(model_name, cache_folder="./hf_model_cache", device="cpu", trust_remote_code=True)
+        return SentenceTransformer(
+            'sentence-transformers/all-MiniLM-L6-v2',
+            cache_folder="./hf_model_cache",
+            device="cpu",
+            trust_remote_code=True
+        )
 
     model = load_model()
 
@@ -54,14 +59,18 @@ with show_traceback_on_streamlit():
         url = "https://storage.googleapis.com/iati-dataset/IATI-updated.csv"
         df = pd.read_csv(url, engine="python", encoding="utf-8")
         df.columns = df.columns.str.strip().str.lower()
-        required = ['recipient-country', 'sector', 'description append', 'total-commitment-usd', 'start-actual', 'reporting-org-type']
+
+        required = ['recipient-country', 'sector', 'description append',
+                    'total-commitment-usd', 'start-actual', 'reporting-org-type']
         for col in required:
             if col not in df.columns:
                 st.error(f"Missing column: {col}")
                 return pd.DataFrame()
+
         df = df.dropna(subset=required)
         for col in required:
             df = df[df[col].astype(str).str.strip() != '']
+
         df['sector_list'] = df['sector'].str.split(';').apply(lambda x: [i.strip() for i in x])
         df = df.explode('sector_list')
         df['total-commitment-usd'] = pd.to_numeric(df['total-commitment-usd'], errors='coerce')
@@ -70,7 +79,7 @@ with show_traceback_on_streamlit():
 
     df = load_data()
     if df.empty:
-        st.error("Failed to load or clean the dataset.")
+        st.error("\u274c Failed to load or clean the dataset.")
         st.stop()
 
     @st.cache_resource
@@ -155,7 +164,7 @@ with show_traceback_on_streamlit():
         final_orgs.sort(key=lambda x: x[1], reverse=True)
         return final_orgs[:10]
 
-    # --- UI ---
+    # UI
     st.markdown("### Grant Matcher: Find Matching Funders and Their Projects")
 
     amount_range = st.slider("Select grant amount range (USD)", 0, 10000000, (50000, 1000000))
@@ -177,14 +186,14 @@ with show_traceback_on_streamlit():
     st.session_state.selected_org_types = selected_types
 
     if st.button("Find Matches"):
-        with st.spinner("🔎 Matching your project..."):
+        with st.spinner("\U0001F50E Matching your project..."):
             matches = match_projects(description, amount_range[0], amount_range[1],
                                      country_input, sector_input, selected_types)
 
         if not matches:
-            st.warning("⚠️ No matches found. Try adjusting your filters.")
+            st.warning("\u26a0\ufe0f No matches found. Try adjusting your filters.")
         else:
-            st.subheader("✅ Top Matching Organizations and Their Projects")
+            st.subheader("\u2705 Top Matching Organizations and Their Projects")
             for org_name, score, rows in matches:
                 org_row = next((r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['description append'])), None)
                 if not org_row:
@@ -199,7 +208,7 @@ with show_traceback_on_streamlit():
                 st.markdown(f"**Funding Amount:** ${org_row['total-commitment-usd']:,.0f}")
                 st.markdown("---")
 
-# 📄 Optional footer banner
+# Optional banner
 banner_path = "banner.png"
 try:
     with open(banner_path, "rb") as f:
@@ -213,7 +222,7 @@ try:
         """
         st.markdown(banner_html, unsafe_allow_html=True)
 except FileNotFoundError:
-    st.warning("⚠️ banner.png not found. Skipping footer banner.")
+    st.warning("\u26a0\ufe0f banner.png not found. Skipping footer banner.")
 
 st.markdown("""
 ---
