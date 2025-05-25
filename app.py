@@ -34,7 +34,7 @@ model = load_model()
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv("IATI-updated.csv")
+    df = pd.read_csv("https://storage.googleapis.com/iati-dataset/IATI-updated.csv")
     df['recipient-country'] = df['recipient-country'].astype(str).str.lower()
     df['sector'] = df['sector'].astype(str).str.lower()
     df['Description Append'] = df['Description Append'].astype(str)
