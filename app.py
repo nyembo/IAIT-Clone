@@ -187,7 +187,7 @@ if st.button("Find Matches"):
 banner_path = "banner.png"
 banner_html = f"""
 <div style='text-align:center; margin-top: 50px;'>
-    <img src='data:image/png;base64,{base64.b64encode(open(banner_path, "rb").read()).decode()}' 
+    <a href='https://www.econbook.biz' target='_blank'><img src='data:image/png;base64,{base64.b64encode(open(banner_path, "rb").read()).decode()}' 
          style='width: 100%; max-width: 800px; height: auto;'>
 </div>
 """
