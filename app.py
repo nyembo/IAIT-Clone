@@ -7,8 +7,6 @@ from fuzzywuzzy import fuzz
 import base64
 import os
 
-st.title("🌍 Grant Matcher")
-
 # === Logo ===
 def load_image_base64(path):
     if os.path.exists(path):
@@ -184,6 +182,16 @@ if st.button("Find Matches"):
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
+
+# Responsive footer banner
+banner_path = "banner.png"
+banner_html = f"""
+<div style='text-align:center; margin-top: 50px;'>
+    <img src='data:image/png;base64,{base64.b64encode(open(banner_path, "rb").read()).decode()}' 
+         style='width: 100%; max-width: 800px; height: auto;'>
+</div>
+"""
+st.markdown(banner_html, unsafe_allow_html=True)
 
 # Footnote explanation
 st.markdown("""
