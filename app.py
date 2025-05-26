@@ -7,7 +7,6 @@ from fuzzywuzzy import fuzz
 import base64
 import os
 
-st.set_page_config(page_title="Grant Matcher", layout="centered")
 st.title("🌍 Grant Matcher")
 
 # === Logo ===
@@ -145,9 +144,9 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
     return final_orgs[:10]
 
 # === UI ===
-st.markdown("### Grant Matcher: Find Matching Funders and Their Projects")
+st.markdown("### Find Funders For Your Development Project")
 
-amount_range = st.slider("Select grant amount range (USD)", 0, 10000000, (50000, 1000000))
+amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="$%d")
 country_input = st.text_input("Enter recipient country/region(s) (comma separated)")
 sector_input = st.text_input("Enter sector(s) (comma separated)")
 description = st.text_area("Describe your project")
@@ -186,11 +185,23 @@ if st.button("Find Matches"):
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
 
-# === Footer Banner ===
-banner_base64 = load_image_base64("banner.png")
-if banner_base64:
-    st.markdown(f"""
-    <div style='text-align:center; margin-top: 50px;'>
-        <img src='data:image/png;base64,{banner_base64}' style='width: 100%; max-width: 800px; height: auto;'>
-    </div>
-    """, unsafe_allow_html=True)
+# Footnote explanation
+st.markdown("""
+---
+<small>
+**Technical Disclaimer: Data & Model Use**
+
+This tool was created in response to the defunding of the United States Agency for International Development (USAID) to help NGOs identify alternative funders that have historically supported similar types of projects. By analyzing historical grantmaking patterns, it aims to guide organizations toward relevant funding sources based on project similarity.
+
+The tool leverages a Large Language Model (LLM) enhanced with vector similarity search, powered by Facebook AI Similarity Search (FAISS). The underlying dataset is compiled from publicly available records published through the International Aid Transparency Initiative (IATI), available at <https://iatistandard.org/en/>.
+
+Funders are ranked based on the number of past projects in the dataset that closely match the user's project description. The more relevant historical projects a funder has supported, the higher they are ranked in the results. This approach is designed to surface organizations with a demonstrated history of funding work similar to yours.
+
+While every effort has been made to ensure the reliability of the data, completeness and accuracy are ultimately dependent on the original information published by reporting organizations. Some records may be outdated, incomplete, or inconsistently formatted.
+
+If your NGO is not currently represented and you would like to be included in future versions of this tool—or if you need support preparing your data for inclusion—please complete our submission form [submission form](https://www.virunga.ai/submission).
+Contact us as well if you would like assistance being included in the IATI dataset itself.
+
+**Disclaimer:** This tool is provided for informational purposes only. It does not constitute legal, financial, or strategic advice, nor does it guarantee access to funding. Users are encouraged to validate all outputs and consult directly with funding organizations before acting on any recommendations.
+</small>
+""", unsafe_allow_html=True)
