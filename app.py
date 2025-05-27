@@ -16,7 +16,7 @@ def load_image_base64(path):
 
 # Choose logo based on theme
 theme = st.get_option("theme.base")  # 'light' or 'dark'
-logo_path = "logo.png" if theme == "light" else "logo-n.png"
+logo_path = "logo.png" if theme == "light" else "logo.png"
 logo_base64 = load_image_base64(logo_path)
 
 if logo_base64:
@@ -150,7 +150,8 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
 # === UI ===
 st.markdown("### Find Funders For Your Development Project")
 
-amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="$%s")
+amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000))
+st.markdown(f"**Selected range:** ${amount_range[0]:,} – ${amount_range[1]:,}")
 country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
 sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
 description = st.text_area("Describe your project")
@@ -188,6 +189,7 @@ if st.button("Find Matches"):
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
+            
 
 # Responsive footer banner
 banner_path = "banner.png"
