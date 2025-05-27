@@ -150,7 +150,7 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
 # === UI ===
 st.markdown("### Find Funders For Your Development Project")
 
-amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="${:,}")
+amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="$%s")
 country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
 sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
 description = st.text_area("Describe your project")
