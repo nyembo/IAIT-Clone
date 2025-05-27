@@ -14,13 +14,19 @@ def load_image_base64(path):
             return base64.b64encode(f.read()).decode()
     return None
 
-logo_base64 = load_image_base64("logo.png")
+# Choose logo based on theme
+theme = st.get_option("theme.base")  # 'light' or 'dark'
+logo_path = "logo.png" if theme == "light" else "logo-n.png"
+logo_base64 = load_image_base64(logo_path)
+
 if logo_base64:
     st.markdown(f"""
     <div style='text-align:center;'>
         <img src='data:image/png;base64,{logo_base64}' style='width: 20%; max-width: 200px; height: auto;'>
     </div>
     """, unsafe_allow_html=True)
+else:
+    st.warning(f"⚠️ Logo not found: {logo_path}")
 
 # === Load model ===
 @st.cache_resource(show_spinner=False)
@@ -79,7 +85,7 @@ def summarize_focus_area(df_org):
     avg_amount = df_org['total-Commitment-USD'].mean()
     return (
         f"Focuses on sectors: {', '.join(sectors)}.\n"
-        f"Operates mainly in: {', '.join(countries)}.\n"
+        f"Countries where it operates most: {', '.join(countries)}.\n"
         f"Average funding: ${avg_amount:,.0f}."
     )
 
@@ -144,9 +150,9 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
 # === UI ===
 st.markdown("### Find Funders For Your Development Project")
 
-amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="$%d")
-country_input = st.text_input("Enter recipient country/region(s) (comma separated)")
-sector_input = st.text_input("Enter sector(s) (comma separated)")
+amount_range = st.slider("Select grant amount range (USD)", 0, 100_000_000, (50_000, 100_000_000), format="${:,}")
+country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
+sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
 description = st.text_area("Describe your project")
 
 all_types = sorted(df['reporting-org-type'].dropna().unique())
@@ -178,7 +184,7 @@ if st.button("Find Matches"):
 
             st.markdown(f"### Organization: {org_display}")
             st.markdown(f"**Focus Area:**\n{summarize_focus_area(df[df['reporting-org'] == org_name])}")
-            st.markdown(f"**Matched Project Description:**\n{org_row['Description Append']}")
+            st.markdown(f"**Example of a similar project:**\n{org_row['Description Append']}")
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
