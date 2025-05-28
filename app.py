@@ -15,8 +15,7 @@ def load_image_base64(path):
     return None
 
 # Choose logo based on theme
-theme = st.get_option("theme.base")  # 'light' or 'dark'
-logo_path = "logo.png" if theme == "light" else "logo.png"
+logo_path = "logo.png" 
 logo_base64 = load_image_base64(logo_path)
 
 if logo_base64:
@@ -153,7 +152,7 @@ amount_range = st.slider("Select grant amount range (USD)", 0, 20_000_000, (50_0
 st.markdown(f"Selected Range: USD{amount_range[0]:,} – USD{amount_range[1]:,}")
 country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
 sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
-description = st.text_area("Describe your project")
+description = st.text_area("Give a detailed description of your project",)
 
 all_types = sorted(df['reporting-org-type'].dropna().unique())
 if 'select_all_orgs' not in st.session_state:
@@ -175,20 +174,19 @@ if st.button("Find Matches"):
         st.warning("⚠️ No matches found. Try adjusting your filters.")
     else:
         st.subheader("The organization that funds the most projects similar to yours is:")
-        for org_name, score, rows in matches:
+        for i, (org_name, score, rows) in enumerate(matches, 1):
             filtered_rows = [r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['Description Append'])]
             if not filtered_rows:
                 continue
             org_row = filtered_rows[0]
             org_display = f"[{org_name}]({org_row['publisher_url']})" if pd.notna(org_row.get('publisher_url')) else org_name
 
-            st.markdown(f"### Organization: {org_display}")
+            st.markdown(f"### {i}. Organization: {org_display}")
             st.markdown(f"**Focus Area:**\n{summarize_focus_area(df[df['reporting-org'] == org_name])}")
             st.markdown(f"**Example of a similar project:**\n{org_row['Description Append']}")
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
-            
 
 # Responsive footer banner
 banner_path = "banner.png"
