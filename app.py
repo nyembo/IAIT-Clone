@@ -28,28 +28,15 @@ if logo_base64:
 else:
     st.warning(f"⚠️ Logo not found: {logo_path}")
 
-# === Inputs ===
-def format_number_input(label, value):
-    raw = st.text_input(label, f"{value:,}").replace(",", "")
-    return int(raw) if raw.isdigit() else value
-
-amount_min = format_number_input("Minimum grant amount (USD)", 0)
-amount_max = format_number_input("Maximum grant amount (USD)", 20000000)
-
-if amount_min >= amount_max:
-    st.error("Minimum amount must be less than maximum amount.")
-
-country_input = st.text_input("Enter recipient country/region(s)/leave empty for all (comma separated)")
-sector_input = st.text_input("Enter sector(s)/leave empty for all (comma separated)")
-description = st.text_area("Describe your project")
-
 # === Load model ===
-@st.cache_resource(show_spinner=True)
+@st.cache_resource(show_spinner=False)
 def load_model():
     return SentenceTransformer('all-MiniLM-L6-v2', device="cpu", trust_remote_code=True)
 
+model = load_model()
+
 # === Load data ===
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def load_data():
     df = pd.read_csv("https://storage.googleapis.com/iati-dataset/IATI_updated_compress.csv")
     df['recipient-country'] = df['recipient-country'].astype(str).str.lower()
@@ -65,6 +52,20 @@ def load_data():
     df['sector_list'] = df['sector'].str.split(';').apply(lambda x: [i.strip() for i in x])
     df = df.explode('sector_list')
     return df
+
+df = load_data()
+
+# === Build FAISS index ===
+@st.cache_resource(show_spinner=False)
+def build_faiss(df):
+    embeddings = np.vstack(df['Description Append'].apply(lambda x: model.encode(x, convert_to_numpy=True)))
+    dim = embeddings.shape[1]
+    index = faiss.IndexFlatIP(dim)
+    faiss.normalize_L2(embeddings)
+    index.add(embeddings)
+    return index, embeddings
+
+index, embeddings = build_faiss(df)
 
 # === Utility Functions ===
 def match_fuzzy(input_text, choices, threshold=65):
@@ -84,90 +85,96 @@ def summarize_focus_area(df_org):
     avg_amount = df_org['total-Commitment-USD'].mean()
     return (
         f"Focuses on sectors: {', '.join(sectors)}.\n"
-        f"Operates mainly in: {', '.join(countries)}.\n"
+        f"Countries where it operates most: {', '.join(countries)}.\n"
         f"Average funding: ${avg_amount:,.0f}."
     )
 
-# === Process on Button Click ===
+# === Matching logic ===
+def match_projects(description, amount_min, amount_max, country_input, sector_input, selected_types):
+    query_vec = model.encode(description, convert_to_numpy=True)
+    faiss.normalize_L2(np.expand_dims(query_vec, axis=0))
+    D, I = index.search(np.expand_dims(query_vec, axis=0), 5000)
+
+    matched_countries = match_fuzzy(country_input, df['recipient-country'].unique()) if country_input.strip() else []
+    matched_sectors = match_fuzzy(sector_input, df['sector_list'].unique()) if sector_input.strip() else []
+
+    org_scores = {}
+    for idx in I[0]:
+        if idx == -1:
+            continue
+        row = df.iloc[idx]
+
+        if row['reporting-org-type'] not in selected_types:
+            continue
+        if country_input.strip() and row['recipient-country'] not in matched_countries:
+            continue
+        if sector_input.strip() and row['sector_list'] not in matched_sectors:
+            continue
+        if not (amount_min <= row['total-Commitment-USD'] <= amount_max):
+            continue
+
+        org = row['reporting-org']
+        if org not in org_scores:
+            org_scores[org] = {
+                'country_count': 0,
+                'amount_count': 0,
+                'sector_match': 0,
+                'similarities': [],
+                'rows': []
+            }
+
+        org_scores[org]['amount_count'] += 1
+        if country_input.strip():
+            org_scores[org]['country_count'] += 1
+        if sector_input.strip():
+            org_scores[org]['sector_match'] += 1
+        org_scores[org]['similarities'].append(D[0][np.where(I[0] == idx)[0][0]])
+        org_scores[org]['rows'].append(row)
+
+    final_orgs = []
+    for org, info in org_scores.items():
+        if info['amount_count'] >= 3:
+            score = (
+                (0.4 * min(info['amount_count'] / 10, 1)) +
+                (0.3 * min(info['country_count'] / 10, 1) if country_input.strip() else 0) +
+                (0.1 * min(info['sector_match'] / 10, 1) if sector_input.strip() else 0) +
+                (0.2 * np.mean(info['similarities'])) -
+                (0.2 * (np.mean([r['total-Commitment-USD'] for r in info['rows']]) / 10_000_000)) -
+                (0.2 * len(info['rows']) / 1000)
+            )
+            final_orgs.append((org, score, info['rows']))
+
+    final_orgs.sort(key=lambda x: x[1], reverse=True)
+    return final_orgs[:10]
+
+# === UI ===
+st.markdown("### Find Funders For Your Development Project")
+amount_range = st.slider("Select grant amount range (USD): ${amount_range[0]:,} – ${amount_range[1]:,}", 0, 20_000_000, (50_000, 1_000_000))
+st.markdown(f"**Selected range (USD):** {amount_range[0]:,} – {amount_range[1]:,}")
+country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
+sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
+description = st.text_area("Describe your project")
+
+all_types = sorted(df['reporting-org-type'].dropna().unique())
+if 'select_all_orgs' not in st.session_state:
+    st.session_state.select_all_orgs = True
+if 'selected_org_types' not in st.session_state:
+    st.session_state.selected_org_types = all_types
+
+select_all = st.checkbox("Select all organization types", value=st.session_state.select_all_orgs)
+selected_types = st.multiselect("Filter by organization type", all_types, default=all_types if select_all else st.session_state.selected_org_types)
+
+st.session_state.select_all_orgs = select_all
+st.session_state.selected_org_types = selected_types
+
 if st.button("Find Matches"):
-    with st.spinner("🔄 Loading model and dataset..."):
-        model = load_model()
-        df = load_data()
-
-    all_types = sorted(df['reporting-org-type'].dropna().unique())
-    selected_types = st.multiselect("Filter by organization type", all_types, default=all_types)
-
-    with st.spinner("🔍 Building FAISS index..."):
-        embeddings = np.vstack(df['Description Append'].apply(lambda x: model.encode(x, convert_to_numpy=True)))
-        dim = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dim)
-        faiss.normalize_L2(embeddings)
-        index.add(embeddings)
-
-    def match_projects(description, amount_min, amount_max, country_input, sector_input, selected_types):
-        query_vec = model.encode(description, convert_to_numpy=True)
-        faiss.normalize_L2(np.expand_dims(query_vec, axis=0))
-        D, I = index.search(np.expand_dims(query_vec, axis=0), 5000)
-
-        matched_countries = match_fuzzy(country_input, df['recipient-country'].unique()) if country_input.strip() else []
-        matched_sectors = match_fuzzy(sector_input, df['sector_list'].unique()) if sector_input.strip() else []
-
-        org_scores = {}
-        for idx in I[0]:
-            if idx == -1:
-                continue
-            row = df.iloc[idx]
-
-            if row['reporting-org-type'] not in selected_types:
-                continue
-            if country_input.strip() and row['recipient-country'] not in matched_countries:
-                continue
-            if sector_input.strip() and row['sector_list'] not in matched_sectors:
-                continue
-            if not (amount_min <= row['total-Commitment-USD'] <= amount_max):
-                continue
-
-            org = row['reporting-org']
-            if org not in org_scores:
-                org_scores[org] = {
-                    'country_count': 0,
-                    'amount_count': 0,
-                    'sector_match': 0,
-                    'similarities': [],
-                    'rows': []
-                }
-
-            org_scores[org]['amount_count'] += 1
-            if country_input.strip():
-                org_scores[org]['country_count'] += 1
-            if sector_input.strip():
-                org_scores[org]['sector_match'] += 1
-            org_scores[org]['similarities'].append(D[0][np.where(I[0] == idx)[0][0]])
-            org_scores[org]['rows'].append(row)
-
-        final_orgs = []
-        for org, info in org_scores.items():
-            if info['amount_count'] >= 3:
-                score = (
-                    (0.4 * min(info['amount_count'] / 10, 1)) +
-                    (0.3 * min(info['country_count'] / 10, 1) if country_input.strip() else 0) +
-                    (0.1 * min(info['sector_match'] / 10, 1) if sector_input.strip() else 0) +
-                    (0.2 * np.mean(info['similarities'])) -
-                    (0.2 * (np.mean([r['total-Commitment-USD'] for r in info['rows']]) / 10_000_000)) -
-                    (0.2 * len(info['rows']) / 1000)
-                )
-                final_orgs.append((org, score, info['rows']))
-
-        final_orgs.sort(key=lambda x: x[1], reverse=True)
-        return final_orgs[:10]
-
-    with st.spinner("🔎 Matching your project..."):
-        matches = match_projects(description, amount_min, amount_max, country_input, sector_input, selected_types)
+    with st.spinner("Matching your project..."):
+        matches = match_projects(description, amount_range[0], amount_range[1], country_input, sector_input, selected_types)
 
     if not matches:
         st.warning("⚠️ No matches found. Try adjusting your filters.")
     else:
-        st.subheader("Organization with past projects most similar to yours")
+        st.subheader("The organization that funds the most projects similar to yours is:")
         for org_name, score, rows in matches:
             filtered_rows = [r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['Description Append'])]
             if not filtered_rows:
@@ -177,7 +184,7 @@ if st.button("Find Matches"):
 
             st.markdown(f"### Organization: {org_display}")
             st.markdown(f"**Focus Area:**\n{summarize_focus_area(df[df['reporting-org'] == org_name])}")
-            st.markdown(f"**Matched Project Description:**\n{org_row['Description Append']}")
+            st.markdown(f"**Example of a similar project:**\n{org_row['Description Append']}")
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
             st.markdown(f"**Funding Amount:** ${org_row['total-Commitment-USD']:,.0f}")
             st.markdown("---")
