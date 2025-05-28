@@ -35,7 +35,9 @@ def format_number_input(label, value):
 
 amount_min = format_number_input("Minimum grant amount (USD)", 0)
 amount_max = format_number_input("Maximum grant amount (USD)", 20000000)
-st.markdown(f"**Selected range:** ${amount_min:,} – ${amount_max:,}")
+
+if amount_min >= amount_max:
+    st.error("Minimum amount must be less than maximum amount.")
 
 country_input = st.text_input("Enter recipient country/region(s)/leave empty for all (comma separated)")
 sector_input = st.text_input("Enter sector(s)/leave empty for all (comma separated)")
