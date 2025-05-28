@@ -173,7 +173,7 @@ if st.button("Find Matches"):
     if not matches:
         st.warning("⚠️ No matches found. Try adjusting your filters.")
     else:
-        st.subheader("The organization that funds the most projects similar to yours is:")
+        st.subheader("The organizations that fund the most projects similar to yours:")
         for i, (org_name, score, rows) in enumerate(matches, 1):
             filtered_rows = [r for r in rows if pd.notna(r['reporting-org']) and pd.notna(r['Description Append'])]
             if not filtered_rows:
