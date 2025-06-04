@@ -148,7 +148,7 @@ def match_projects(description, amount_min, amount_max, country_input, sector_in
 
 # === UI ===
 st.markdown("### Find Funders For Your Development Project")
-amount_range = st.slider("Select grant amount range (USD)", 0, 20_000_000, (50_000, 1_000_000))
+amount_range = st.slider("Select grant amount range (USD)", 0, 20_000_000, (0, 1_000_000))
 st.markdown(f"Selected Range: USD{amount_range[0]:,} – USD{amount_range[1]:,}")
 country_input = st.text_input("Enter recipient country/region(s) or leave blank to see all (comma separated)")
 sector_input = st.text_input("Enter sector(s) or leave blank to see all (comma separated)")
@@ -160,8 +160,8 @@ if 'select_all_orgs' not in st.session_state:
 if 'selected_org_types' not in st.session_state:
     st.session_state.selected_org_types = all_types
 
-select_all = st.checkbox("Select all organization types", value=st.session_state.select_all_orgs)
-selected_types = st.multiselect("Filter by organization type", all_types, default=all_types if select_all else st.session_state.selected_org_types)
+select_all = st.checkbox("Select all funder types", value=st.session_state.select_all_orgs)
+selected_types = st.multiselect("Filter by funder type", all_types, default=all_types if select_all else st.session_state.selected_org_types)
 
 st.session_state.select_all_orgs = select_all
 st.session_state.selected_org_types = selected_types
@@ -181,7 +181,7 @@ if st.button("Find Matches"):
             org_row = filtered_rows[0]
             org_display = f"[{org_name}]({org_row['publisher_url']})" if pd.notna(org_row.get('publisher_url')) else org_name
 
-            st.markdown(f"### {i}. Organization: {org_display}")
+            st.markdown(f"### {i}. Funder: {org_display}")
             st.markdown(f"**Focus Area:**\n{summarize_focus_area(df[df['reporting-org'] == org_name])}")
             st.markdown(f"**Example of a similar project:**\n{org_row['Description Append']}")
             st.markdown(f"**Country:** {org_row['recipient-country'].title()} | **Sector:** {org_row['sector_list'].title()}")
