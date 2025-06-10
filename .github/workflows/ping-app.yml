@@ -1,0 +1,19 @@
+name: Ping Streamlit App
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # Every 3 hours
+  workflow_dispatch:  # Allow manual triggering too
+
+jobs:
+  keep_warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit app every minute for 3 minutes
+        run: |
+          for i in {1..3}
+          do
+            echo "Pinging intergrant.streamlit.app - Attempt $i"
+            curl -s -o /dev/null -w "%{http_code}\n" https://intergrant.streamlit.app/
+            sleep 60
+          done
